@@ -10,12 +10,12 @@
 
 **Project ID:**
 ```
-[COLA AQUI ANTES DE COMEÇAR — pega em https://console.cloud.google.com/home/dashboard]
+garras-496602
 ```
 
 **Project Number:**
 ```
-[COLA AQUI — mesma página, abaixo do ID]
+564689870047
 ```
 
 **Application name:**
@@ -30,12 +30,12 @@ https://www.youtube.com/channel/UCGXNSUQTScWqdN7Rfhkbg2A
 
 **Privacy Policy URL:**
 ```
-[URL DEPOIS DE PUBLICAR — ex: https://unlucky-jon.github.io/canal-cortes/legal/privacy-policy.html]
+https://jonatas-f.github.io/canal-cortes/legal/privacy-policy
 ```
 
 **Terms of Service URL:**
 ```
-[URL DEPOIS DE PUBLICAR — ex: https://unlucky-jon.github.io/canal-cortes/legal/terms-of-service.html]
+https://jonatas-f.github.io/canal-cortes/legal/terms-of-service
 ```
 
 **Contact email:**
