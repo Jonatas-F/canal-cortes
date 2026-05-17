@@ -1,0 +1,6 @@
+# Uma URL por linha. Linhas começando com # são ignoradas.
+# Cada URL deve ter um manifesto correspondente em inbox/<id>.json
+# com pelo menos: {"autorizado": true, "canal_fonte": "...", "tema": "..."}
+
+# Exemplo:
+# https://www.youtube.com/watch?v=ABC123

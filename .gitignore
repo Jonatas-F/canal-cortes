@@ -1,0 +1,37 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# dados do pipeline
+inbox/*
+!inbox/.gitkeep
+!inbox/links.txt.example
+raw/
+cuts/
+published/
+queue.db
+queue.db-journal
+
+# Pastas de exemplo / referência (vídeos pesados + copyright)
+exemplo/
+
+# Arquivos grandes em geral (segurança extra)
+*.mp4
+*.webm
+*.mov
+*.mkv
+
+# Backups locais do git (não pra publicar)
+.git.backup-*/
+
+# credenciais (NUNCA commitar)
+client_secret*.json
+token.json
+.env
+
+# whisper models (baixados sob demanda)
+models/
+
+# logs de execução
+*.log

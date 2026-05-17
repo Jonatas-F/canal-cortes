@@ -1,0 +1,102 @@
+# Configuração do Canal de Cortes
+
+canal:
+  nome: "14 Garras"
+  youtube_channel_id: "UCGXNSUQTScWqdN7Rfhkbg2A"  # 14 Garras
+  idioma: pt
+  timezone: America/Sao_Paulo
+
+# Política de agenda — máximo dentro de 10k quota/dia (6 uploads)
+# 5 shorts + 1 long alternado = 6/dia (cabe na quota com margem zero)
+# OU 5 shorts + 1 long em dias selecionados = 5-6/dia (recomendado pra ter buffer)
+agenda:
+  longos:
+    dias: [terça, quinta, sábado]     # 3 longs/semana (mantém buffer na quota)
+    hora: "19:00"                      # pico retenção long-form
+  shorts:
+    cadencia: diaria
+    horas: ["09:00", "13:00", "16:00", "19:00", "21:00"]  # 5/dia em picos brasileiros
+  espacamento_minimo_horas: 2
+
+# Limites YouTube API
+youtube_quota:
+  daily_limit: 10000                # default; pedir aumento p/ 100000
+  max_uploads_per_day: 6            # 6 × 1600 = 9600 (margem 400 p/ outras chamadas)
+  max_dias_planejamento: 30         # agenda no máximo 30 dias à frente
+
+# Limites de cortes por vídeo-fonte
+cortes:
+  long:
+    duracao_min_seg: 180     # 3 min
+    duracao_max_seg: 900     # 15 min
+    max_por_video: 3
+  short:
+    duracao_min_seg: 20
+    duracao_max_seg: 60
+    max_por_video: 5
+  score_viral_minimo: 85     # 0-100 (rubrica Opus Clip), cortes abaixo são descartados
+
+# Transcrição
+whisper:
+  modelo: small              # tiny|base|small|medium|large-v3
+  device: cpu                # auto|cuda|cpu
+  compute_type: int8         # int8 (rápido CPU) | float16 (GPU) | auto
+  language: pt
+
+# Análise (LLM)
+analyzer:
+  backend: claude_code_cli   # claude_code_cli | anthropic_api
+  cli_binary: claude         # binário do Claude Code no PATH
+  prompt_file: prompts/analyzer.md
+
+# Conversão de custo (atualize manualmente)
+moeda:
+  usd_brl_rate: 5.30         # taxa USD -> BRL (referência ~mai/2026)
+
+# Cleanup pós-publicação — economia de disco
+cleanup:
+  apos_publicacao: true       # apaga .mp4 e .srt do corte após upload bem-sucedido
+  manter_thumbnail: true      # extrai thumbnail antes de apagar (referência visual no Obsidian)
+  apagar_raw_quando_tudo_publicado: false  # apaga o source.mp4 quando TODOS os cortes daquele vídeo subirem
+
+# Render
+render:
+  short:
+    resolucao: [1080, 1920]
+    fps: 30
+    crop_modo: centro        # centro | mediapipe (Fase 2)
+    legenda_estilo: tiktok   # tiktok | classico
+    titulo_overlay_seg: 3    # mostra título nos primeiros N segundos
+  long:
+    resolucao_seguir_fonte: true
+  end_card:
+    enabled: true
+    path: assets/end_card.png
+    duracao_seg: 3
+    aplicar_em: [short, long]    # tipos que recebem o end card
+  cover:
+    # Modo de geração quando NÃO houver inbox/<id>.cover.{png,jpg}:
+    #   gemini: Gemini 2.5 Flash Image (Nano Banana) — qualidade alta, ~$0.04/img
+    #   html: template HTML+CSS local + rostos extraídos (gratuito mas inferior)
+    #   ffmpeg: fallback com frame + banner ffmpeg drawtext (legado)
+    mode: gemini
+    # Modelos disponíveis (verifique via list_models):
+    #   gemini-3-pro-image-preview        — MAIS POTENTE, melhor identidade
+    #   gemini-3.1-flash-image-preview    — rápido e bom
+    #   gemini-2.5-flash-image            — flash 2.5 (Nano Banana)
+    gemini_model: gemini-2.5-flash-image
+    # API key (opcional aqui — prefira env var GEMINI_API_KEY ou arquivo .env)
+    # gemini_api_key: "sua-key-aqui"
+    autodetect_participantes: true  # detecta participantes automaticamente
+    max_participantes: 4            # máximo de rostos na capa
+    intro_duracao_seg: 60           # primeiros segundos do source p/ amostrar (vinheta + abertura)
+    intro_max_prints: 20            # quantos screenshots tirar do intro
+    intro_source: video             # "video" (default, source.mp4) ou "cut" (intro do corte)
+    remover_fundo: true             # rembg pra rostos quando mode=html
+    max_rostos: 3
+
+# YouTube
+youtube:
+  privacidade_default: private  # private + publishAt = agendado
+  categoria_id: "22"            # 22 = People & Blogs; mudar conforme tema
+  made_for_kids: false
