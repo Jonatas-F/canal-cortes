@@ -1,0 +1,253 @@
+<!DOCTYPE html><html><head><meta charset='utf-8'><title>14 Garras Auto-Publisher — Technical Documentation</title><style>
+body { font-family: -apple-system, Segoe UI, sans-serif; max-width: 850px; margin: 40px auto; padding: 20px; line-height: 1.5; color: #222; }
+h1 { color: #0a0a0a; border-bottom: 3px solid #ff6b00; padding-bottom: 8px; }
+h2 { color: #4a148c; margin-top: 32px; border-bottom: 1px solid #ddd; padding-bottom: 4px; }
+h3 { color: #ff6b00; }
+code, pre { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; font-size: 0.9em; font-family: Consolas, Monaco, monospace; }
+pre { padding: 12px; overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; margin: 16px 0; }
+th, td { border: 1px solid #ddd; padding: 8px 12px; text-align: left; }
+th { background: #4a148c; color: white; }
+a { color: #ff6b00; }
+blockquote { border-left: 4px solid #ff6b00; padding-left: 12px; color: #555; margin: 12px 0; }
+</style></head><body><h1>14 Garras Auto-Publisher — Technical Documentation</h1>
+<p><strong>For YouTube API Services Audit</strong>
+<strong>Date:</strong> 2026-05-17
+<strong>Operator:</strong> Jonatas Pereira (<code>jonatas.freire.prof@gmail.com</code>)
+<strong>Channel:</strong> <a href="https://www.youtube.com/channel/UCGXNSUQTScWqdN7Rfhkbg2A">14 Garras</a> (<code>UCGXNSUQTScWqdN7Rfhkbg2A</code>)
+<strong>Project:</strong> <code>garras-496602</code> (Number <code>564689870047</code>)
+<strong>Repository:</strong> https://github.com/Jonatas-F/canal-cortes</p>
+<hr />
+<h2>1. Overview</h2>
+<p><strong>14 Garras Auto-Publisher</strong> is a single-user, command-line Python application that automates the publication of authorized podcast content cuts to a single YouTube channel. It runs locally on the operator's machine and is invoked manually for each batch of content.</p>
+<p>The application has <strong>no end users</strong> other than the operator/channel owner. It does not expose any web interface, does not accept third-party authentication, and does not store data beyond a local SQLite queue tracking publication status.</p>
+<hr />
+<h2>2. Architecture</h2>
+<div class="codehilite"><pre><span></span><code>┌─────────────────────────────────────────────────────────────────┐
+│ OPERATOR (local Windows 11 machine, Python 3.12)                │
+│                                                                  │
+│   pipeline.py URL                                                │
+│       │                                                          │
+│       ├──→ ingest.py    (yt-dlp + faster-whisper, LOCAL)        │
+│       ├──→ analyze.py   (Claude API, LOCAL invocation)          │
+│       ├──→ render.py    (ffmpeg, LOCAL)                         │
+│       │       └──→ cover_gemini.py (Gemini API, LOCAL invocation)│
+│       └──→ schedule.py  (YouTube Data API v3, AUTHENTICATED)    │
+│                  │                                               │
+│                  ├──→ videos.insert   (publishAt scheduling)    │
+│                  ├──→ thumbnails.set  (custom thumbnails)       │
+│                  └──→ channels.list   (auth verification)       │
+│                  │                                               │
+│                  ▼                                               │
+└────────────── YouTube Data API v3 ──────────────────────────────┘
+                  │
+                  ▼
+         YouTube channel &quot;14 Garras&quot;
+         (UCGXNSUQTScWqdN7Rfhkbg2A)
+</code></pre></div>
+
+<p>All YouTube API calls are made via the official <code>google-api-python-client</code> Python library (v2.196+).</p>
+<hr />
+<h2>3. OAuth 2.0 Authentication Flow</h2>
+<h3>3.1 One-time setup</h3>
+<p>File: <a href="https://github.com/Jonatas-F/canal-cortes/blob/main/scripts/auth_youtube.py"><code>scripts/auth_youtube.py</code></a></p>
+<div class="codehilite"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">google_auth_oauthlib.flow</span><span class="w"> </span><span class="kn">import</span> <span class="n">InstalledAppFlow</span>
+
+<span class="n">SCOPES</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">&quot;https://www.googleapis.com/auth/youtube.upload&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;https://www.googleapis.com/auth/youtube.readonly&quot;</span><span class="p">,</span>
+<span class="p">]</span>
+
+<span class="n">flow</span> <span class="o">=</span> <span class="n">InstalledAppFlow</span><span class="o">.</span><span class="n">from_client_secrets_file</span><span class="p">(</span><span class="s2">&quot;client_secret.json&quot;</span><span class="p">,</span> <span class="n">SCOPES</span><span class="p">)</span>
+<span class="n">creds</span> <span class="o">=</span> <span class="n">flow</span><span class="o">.</span><span class="n">run_local_server</span><span class="p">(</span><span class="n">port</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+<span class="c1"># Stores refresh_token in token.json (local only, gitignored)</span>
+</code></pre></div>
+
+<p><strong>Flow:</strong>
+1. Operator runs <code>python scripts/auth_youtube.py</code>
+2. Default browser opens at <code>https://accounts.google.com/o/oauth2/auth?...</code>
+3. Operator logs in with their own Google account (channel owner)
+4. Operator grants consent for the requested scopes
+5. Authorization code is exchanged for access + refresh token
+6. <code>token.json</code> is saved locally (in <code>.gitignore</code>)</p>
+<h3>3.2 Subsequent runs</h3>
+<p>File: <a href="https://github.com/Jonatas-F/canal-cortes/blob/main/scripts/schedule.py"><code>scripts/schedule.py</code></a></p>
+<div class="codehilite"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">google.oauth2.credentials</span><span class="w"> </span><span class="kn">import</span> <span class="n">Credentials</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">google.auth.transport.requests</span><span class="w"> </span><span class="kn">import</span> <span class="n">Request</span>
+
+<span class="n">creds</span> <span class="o">=</span> <span class="n">Credentials</span><span class="o">.</span><span class="n">from_authorized_user_file</span><span class="p">(</span><span class="s2">&quot;token.json&quot;</span><span class="p">)</span>
+<span class="k">if</span> <span class="n">creds</span><span class="o">.</span><span class="n">expired</span> <span class="ow">and</span> <span class="n">creds</span><span class="o">.</span><span class="n">refresh_token</span><span class="p">:</span>
+    <span class="n">creds</span><span class="o">.</span><span class="n">refresh</span><span class="p">(</span><span class="n">Request</span><span class="p">())</span>  <span class="c1"># silent refresh</span>
+    <span class="n">token</span><span class="o">.</span><span class="n">json</span><span class="o">.</span><span class="n">write_text</span><span class="p">(</span><span class="n">creds</span><span class="o">.</span><span class="n">to_json</span><span class="p">())</span>
+</code></pre></div>
+
+<p>No user interaction required after initial setup. Token can be revoked at any time at https://myaccount.google.com/permissions.</p>
+<hr />
+<h2>4. API Operations</h2>
+<h3>4.1 <code>videos.insert</code> — main upload operation</h3>
+<p>File: <a href="https://github.com/Jonatas-F/canal-cortes/blob/main/scripts/schedule.py"><code>scripts/schedule.py</code></a>, function <code>upload_to_youtube()</code></p>
+<div class="codehilite"><pre><span></span><code><span class="n">body</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;snippet&quot;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">&quot;title&quot;</span><span class="p">:</span> <span class="n">cut</span><span class="p">[</span><span class="s2">&quot;titulo&quot;</span><span class="p">],</span>
+        <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="n">cut</span><span class="p">[</span><span class="s2">&quot;descricao&quot;</span><span class="p">],</span>  <span class="c1"># includes &quot;Source: &lt;url&gt;&quot; attribution</span>
+        <span class="s2">&quot;tags&quot;</span><span class="p">:</span> <span class="n">cut</span><span class="p">[</span><span class="s2">&quot;tags&quot;</span><span class="p">]</span> <span class="o">+</span> <span class="n">cut</span><span class="p">[</span><span class="s2">&quot;hashtags&quot;</span><span class="p">],</span>
+        <span class="s2">&quot;categoryId&quot;</span><span class="p">:</span> <span class="s2">&quot;22&quot;</span><span class="p">,</span>  <span class="c1"># People &amp; Blogs</span>
+        <span class="s2">&quot;defaultLanguage&quot;</span><span class="p">:</span> <span class="s2">&quot;pt&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;defaultAudioLanguage&quot;</span><span class="p">:</span> <span class="s2">&quot;pt&quot;</span><span class="p">,</span>
+    <span class="p">},</span>
+    <span class="s2">&quot;status&quot;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">&quot;privacyStatus&quot;</span><span class="p">:</span> <span class="s2">&quot;private&quot;</span><span class="p">,</span>     <span class="c1"># uploaded as private</span>
+        <span class="s2">&quot;publishAt&quot;</span><span class="p">:</span> <span class="s2">&quot;2026-05-20T19:00:00-03:00&quot;</span><span class="p">,</span>  <span class="c1"># YouTube native scheduling</span>
+        <span class="s2">&quot;selfDeclaredMadeForKids&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="p">},</span>
+<span class="p">}</span>
+<span class="n">media</span> <span class="o">=</span> <span class="n">MediaFileUpload</span><span class="p">(</span><span class="n">file_path</span><span class="p">,</span> <span class="n">chunksize</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">resumable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">response</span> <span class="o">=</span> <span class="n">yt</span><span class="o">.</span><span class="n">videos</span><span class="p">()</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="n">part</span><span class="o">=</span><span class="s2">&quot;snippet,status&quot;</span><span class="p">,</span> <span class="n">body</span><span class="o">=</span><span class="n">body</span><span class="p">,</span> <span class="n">media_body</span><span class="o">=</span><span class="n">media</span><span class="p">)</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>
+</code></pre></div>
+
+<p><strong>Key behaviors:</strong>
+- All uploads use <code>privacyStatus=private</code> + <code>publishAt</code> — YouTube handles publication transition natively, no external scheduling required.
+- Description includes attribution link to the source video.
+- No artificial inflation: no view, like, subscribe, or comment operations.</p>
+<h3>4.2 <code>thumbnails.set</code> — custom thumbnails for long-form cuts only</h3>
+<div class="codehilite"><pre><span></span><code><span class="n">yt</span><span class="o">.</span><span class="n">thumbnails</span><span class="p">()</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">videoId</span><span class="o">=</span><span class="n">yt_id</span><span class="p">,</span> <span class="n">media_body</span><span class="o">=</span><span class="n">MediaFileUpload</span><span class="p">(</span><span class="n">jpg_path</span><span class="p">,</span> <span class="n">mimetype</span><span class="o">=</span><span class="s2">&quot;image/jpeg&quot;</span><span class="p">))</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>
+</code></pre></div>
+
+<p>Only called for long-form cuts (3–10 min); Shorts use YouTube's default frame selection.</p>
+<h3>4.3 <code>channels.list</code> — verification only (read-only)</h3>
+<p>Called once during OAuth setup to verify channel identity:</p>
+<div class="codehilite"><pre><span></span><code><span class="n">yt</span><span class="o">.</span><span class="n">channels</span><span class="p">()</span><span class="o">.</span><span class="n">list</span><span class="p">(</span><span class="n">part</span><span class="o">=</span><span class="s2">&quot;snippet&quot;</span><span class="p">,</span> <span class="n">mine</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>
+</code></pre></div>
+
+<h3>4.4 <code>videos.list</code> — verification only (read-only, optional)</h3>
+<p>Used optionally after upload to confirm scheduled state:</p>
+<div class="codehilite"><pre><span></span><code><span class="n">yt</span><span class="o">.</span><span class="n">videos</span><span class="p">()</span><span class="o">.</span><span class="n">list</span><span class="p">(</span><span class="n">part</span><span class="o">=</span><span class="s2">&quot;status&quot;</span><span class="p">,</span> <span class="nb">id</span><span class="o">=</span><span class="n">yt_id</span><span class="p">)</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>
+</code></pre></div>
+
+<hr />
+<h2>5. Quota Management</h2>
+<p>File: <a href="https://github.com/Jonatas-F/canal-cortes/blob/main/scripts/common.py"><code>scripts/common.py</code></a></p>
+<p>A local SQLite table <code>youtube_quota</code> tracks daily API usage:</p>
+<div class="codehilite"><pre><span></span><code><span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">youtube_quota</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="nb">date</span><span class="w"> </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">PRIMARY</span><span class="w"> </span><span class="k">KEY</span><span class="p">,</span><span class="w">         </span><span class="c1">-- YYYY-MM-DD (Pacific Time)</span>
+<span class="w">    </span><span class="n">units_used</span><span class="w"> </span><span class="nb">INTEGER</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="w"> </span><span class="k">DEFAULT</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span>
+<span class="w">    </span><span class="n">uploads_count</span><span class="w"> </span><span class="nb">INTEGER</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="w"> </span><span class="k">DEFAULT</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span>
+<span class="w">    </span><span class="n">updated_at</span><span class="w"> </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">DEFAULT</span><span class="w"> </span><span class="k">CURRENT_TIMESTAMP</span>
+<span class="p">);</span>
+</code></pre></div>
+
+<p>Before each <code>videos.insert</code>, the application checks:</p>
+<div class="codehilite"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">quota_can_upload</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">daily_limit</span><span class="o">=</span><span class="mi">10000</span><span class="p">,</span> <span class="n">extra_units</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+    <span class="n">used</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">quota_get_used_today</span><span class="p">(</span><span class="n">conn</span><span class="p">)</span>
+    <span class="n">needed</span> <span class="o">=</span> <span class="mi">1600</span> <span class="o">+</span> <span class="n">extra_units</span>  <span class="c1"># videos.insert cost</span>
+    <span class="k">return</span> <span class="p">(</span><span class="n">used</span> <span class="o">+</span> <span class="n">needed</span> <span class="o">+</span> <span class="mi">500</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="n">daily_limit</span>  <span class="c1"># 500 safety margin</span>
+</code></pre></div>
+
+<p>If the safety margin would be exceeded, the upload is deferred to the next day. This prevents accidental quota exhaustion.</p>
+<hr />
+<h2>6. Source Material Authorization</h2>
+<p>The application is operated only on source video content for which the operator holds explicit re-publication authorization. Each source has a manifest file <code>inbox/&lt;video_id&gt;.json</code>:</p>
+<div class="codehilite"><pre><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;autorizado&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;canal_fonte&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Os Sócios Podcast&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;source_url&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://www.youtube.com/watch?v=...&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;tema&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;...&quot;</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>The application checks the <code>autorizado</code> flag before adding cuts to the upload queue. If <code>autorizado=false</code>, the cut is marked as <code>blocked</code> and never uploaded.</p>
+<hr />
+<h2>7. Content Generated</h2>
+<p>Each cut uploaded contains:
+- <strong>Original audio</strong>: extracted from the authorized source video, trimmed to a specific segment (20s–10min)
+- <strong>Burned-in subtitles</strong>: word-by-word karaoke style (from Whisper transcription)
+- <strong>Title overlay</strong>: brief 3-second overlay at the start
+- <strong>End card</strong>: 3-second branded "14 Garras" subscribe call-to-action
+- <strong>Custom thumbnail</strong> (long-form only): generated via Gemini API using extracted speaker face references</p>
+<p>Every video includes attribution to the source in its description:</p>
+<div class="codehilite"><pre><span></span><code>Acompanhe a análise sobre...
+
+📺 Vídeo original: https://www.youtube.com/watch?v=...
+
+#politica #flaviobolsonaro #renansantos
+</code></pre></div>
+
+<hr />
+<h2>8. Compliance Summary</h2>
+<table>
+<thead>
+<tr>
+<th>YouTube API Policy</th>
+<th>Compliance</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Does not inflate views/likes/subs/comments</td>
+<td>✅ No such API calls used</td>
+</tr>
+<tr>
+<td>Does not scrape data from other channels</td>
+<td>✅ Only uploads to operator's own channel</td>
+</tr>
+<tr>
+<td>Respects quota limits</td>
+<td>✅ Local quota tracker enforces ceiling</td>
+</tr>
+<tr>
+<td>Uses <code>publishAt</code> for scheduling (not simulating user activity)</td>
+<td>✅ Native YouTube scheduling only</td>
+</tr>
+<tr>
+<td>Operates on authorized content only</td>
+<td>✅ Manifest <code>autorizado=true</code> enforced</td>
+</tr>
+<tr>
+<td>Source attribution in description</td>
+<td>✅ Mandatory, auto-included</td>
+</tr>
+<tr>
+<td>Single channel scope</td>
+<td>✅ OAuth fixed to one Google account</td>
+</tr>
+<tr>
+<td>No public-facing service</td>
+<td>✅ Local CLI only</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>9. Data Handling</h2>
+<h3>Stored locally (operator's machine only):</h3>
+<ul>
+<li><code>client_secret.json</code> — OAuth client credentials (gitignored)</li>
+<li><code>token.json</code> — OAuth refresh token (gitignored)</li>
+<li><code>queue.db</code> — SQLite tracking cut metadata, schedule, YouTube video IDs (gitignored)</li>
+<li><code>cuts/&lt;source_id&gt;/*.mp4</code> — rendered cuts (deleted after publication)</li>
+<li><code>raw/&lt;source_id&gt;/source.mp4</code> — downloaded source (deleted after all cuts uploaded)</li>
+</ul>
+<h3>Never collected or stored:</h3>
+<ul>
+<li>Data from any user other than the operator</li>
+<li>Data from any YouTube channel other than 14 Garras</li>
+<li>Analytics, comments, or interaction data</li>
+</ul>
+<h3>Third-party services used:</h3>
+<ul>
+<li><strong>Google YouTube Data API v3</strong> (this audit)</li>
+<li><strong>Google Gemini API</strong> (for thumbnail generation, no user data sent)</li>
+<li><strong>Anthropic Claude API</strong> (for transcript analysis, local invocation)</li>
+</ul>
+<hr />
+<h2>10. References</h2>
+<ul>
+<li><strong>Source code</strong> (full review): https://github.com/Jonatas-F/canal-cortes</li>
+<li><strong>Privacy Policy</strong>: https://jonatas-f.github.io/canal-cortes/legal/privacy-policy</li>
+<li><strong>Terms of Service</strong>: https://jonatas-f.github.io/canal-cortes/legal/terms-of-service</li>
+<li><strong>Workflow documentation</strong>: https://github.com/Jonatas-F/canal-cortes/blob/main/docs/SETUP.md</li>
+<li><strong>Channel</strong>: https://www.youtube.com/channel/UCGXNSUQTScWqdN7Rfhkbg2A</li>
+<li><strong>Contact</strong>: jonatas.freire.prof@gmail.com</li>
+</ul>
+<hr />
+<h2>11. Recorded Demonstration</h2>
+<p>A screen recording demonstrating the full pipeline (OAuth setup → cut generation → upload → scheduled state in YouTube Studio) is available upon request. Contact <code>jonatas.freire.prof@gmail.com</code>.</p></body></html>
