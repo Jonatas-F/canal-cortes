@@ -21,6 +21,7 @@ from common import ROOT
 SCOPES = [
     "https://www.googleapis.com/auth/youtube.upload",
     "https://www.googleapis.com/auth/youtube.readonly",
+    "https://www.googleapis.com/auth/youtube",       # escrita: videos.update, thumbnails.set, etc
 ]
 CLIENT_SECRET = ROOT / "client_secret.json"
 TOKEN_PATH = ROOT / "token.json"

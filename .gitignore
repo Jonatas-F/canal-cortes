@@ -28,6 +28,8 @@ exemplo/
 # credenciais (NUNCA commitar)
 client_secret*.json
 token.json
+token.json.*
+token-*.json
 vertex-sa.json
 vertex-*.json
 .env
