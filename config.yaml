@@ -85,6 +85,11 @@ render:
     #   gemini-3.1-flash-image-preview    — rápido e bom
     #   gemini-2.5-flash-image            — flash 2.5 (Nano Banana)
     gemini_model: gemini-2.5-flash-image
+    # Vertex AI (quota MUITO maior que Gemini API direta)
+    use_vertex: true                 # se true e vertex-sa.json existe, usa Vertex
+    vertex_sa_path: vertex-sa.json   # caminho relativo ao repo
+    vertex_project: garras-496602    # mesmo do YouTube
+    vertex_location: us-central1     # região Vertex AI
     # API key (opcional aqui — prefira env var GEMINI_API_KEY ou arquivo .env)
     # gemini_api_key: "sua-key-aqui"
     autodetect_participantes: true  # detecta participantes automaticamente

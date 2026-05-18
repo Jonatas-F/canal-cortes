@@ -47,6 +47,38 @@ def _get_api_key(cfg: dict) -> str:
     )
 
 
+def _make_genai_client(cfg: dict):
+    """Cria cliente Gemini, preferindo Vertex AI (quota maior) se configurado.
+
+    Vertex AI: usa Service Account JSON, mesmo modelo, quota muito maior.
+    Setup: vertex-sa.json na raiz do repo + Vertex AI API habilitada.
+
+    Fallback: Gemini API direta com API key (quota mais restrita).
+    """
+    from google import genai
+
+    cover_cfg = cfg.get("render", {}).get("cover", {})
+    use_vertex = cover_cfg.get("use_vertex", True)
+    sa_path = ROOT / cover_cfg.get("vertex_sa_path", "vertex-sa.json")
+    project = cover_cfg.get("vertex_project", "garras-496602")
+    location = cover_cfg.get("vertex_location", "us-central1")
+
+    if use_vertex and sa_path.exists():
+        # Vertex AI mode (Service Account auth)
+        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(sa_path)
+        try:
+            client = genai.Client(vertexai=True, project=project, location=location)
+            print(f"[cover_gemini] usando Vertex AI (projeto {project}, região {location})")
+            return client
+        except Exception as e:
+            print(f"[cover_gemini] Vertex falhou ({e}), caindo pra Gemini API direta")
+
+    # Fallback: Gemini API direta
+    api_key = _get_api_key(cfg)
+    print(f"[cover_gemini] usando Gemini API direta (quota restrita em previews)")
+    return genai.Client(api_key=api_key)
+
+
 def _build_prompt(titulo: str, n_faces: int, has_style_ref: bool, has_logo: bool) -> str:
     """Prompt focado: deixa as referências visuais fazerem o trabalho pesado."""
     words = [w for w in titulo.split() if len(w) >= 5]
@@ -163,8 +195,7 @@ def generate_cover(
 
     # 3. Monta prompt + contents
     prompt_text = _build_prompt(titulo, len(face_png_list), has_style_ref, has_logo)
-    api_key = _get_api_key(cfg)
-    client = genai.Client(api_key=api_key)
+    client = _make_genai_client(cfg)
 
     contents = [prompt_text]
     if has_style_ref:
