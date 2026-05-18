@@ -79,48 +79,81 @@ def _make_genai_client(cfg: dict):
     return genai.Client(api_key=api_key)
 
 
-def _build_prompt(titulo: str, n_faces: int, has_style_ref: bool, has_logo: bool) -> str:
-    """Prompt focado: deixa as referências visuais fazerem o trabalho pesado."""
-    words = [w for w in titulo.split() if len(w) >= 5]
-    highlight = max(words, key=len) if words else (titulo.split()[0] if titulo.split() else "")
+def _build_prompt(titulo: str, has_logo: bool, has_frame: bool) -> str:
+    """Prompt viral estilo cortes de podcast político (template fornecido pelo user).
 
-    ref_instructions = []
-    if has_style_ref:
-        ref_instructions.append(
-            "IMAGEM 1: capa de REFERÊNCIA visual do canal '14 GARRAS' — copie EXATAMENTE "
-            "esta identidade: layout, paleta de cores (roxo + laranja + preto), brush strokes, "
-            "posição do logo, estilo do título, labels laranja embaixo de cada pessoa."
-        )
-    if has_logo:
-        ref_instructions.append(
-            "IMAGEM 2: logo da onça 14 GARRAS — use EXATAMENTE este logo (não recrie), "
-            "preserve cores, forma, e posicione grande no topo central."
-        )
-    n_face_imgs_start = (1 if has_style_ref else 0) + (1 if has_logo else 0) + 1
-    ref_instructions.append(
-        f"IMAGENS {n_face_imgs_start} a {n_face_imgs_start + n_faces - 1}: os {n_faces} PARTICIPANTES do podcast. "
-        f"USE ESTES ROSTOS EXATOS, sem mudar identidade. Mantenha cabelo, barba, óculos, "
-        f"feições reconhecíveis. Cada pessoa entra como CUTOUT (fundo removido), lado a lado."
-    )
+    Logo é OBRIGATÓRIO. Frame do vídeo dá contexto visual (rostos + cena).
+    Título já vem contextualizado da transcrição (gerado pelo Claude).
+    """
+    return f"""Crie uma thumbnail de YouTube extremamente chamativa e profissional no estilo "podcast cortes viral", usando como referência visual o LOGO enviado e o FRAME do vídeo enviado.
 
-    refs_text = "\n".join(f"- {r}" for r in ref_instructions)
+═══ OBJETIVO ═══
+Thumbnail de corte de podcast político/debate altamente viral. Estética agressiva, moderna, contraste forte, foco em CTR (alta taxa de clique).
 
-    return f"""Gere uma THUMBNAIL 16:9 LANDSCAPE (1920x1080) para o canal "14 GARRAS" de cortes de podcast.
+═══ IDENTIDADE VISUAL ═══
+- Manter TOTAL fidelidade ao logo enviado (NUNCA redesenhar)
+- O logo deve aparecer integrado no topo ou canto
+- Cores principais (do logo):
+  * Roxo vibrante
+  * Laranja/amarelo queimado
+  * Preto profundo
+  * Branco para contraste
+- Estética: thumbnails virais de cortes de política/debate
 
-REFERÊNCIAS FORNECIDAS:
-{refs_text}
+═══ COMPOSIÇÃO ═══
+- Recortar AUTOMATICAMENTE os participantes visíveis no FRAME enviado
+- Aplicar glow/contorno neon nas pessoas (roxo de um lado, laranja do outro)
+- Destacar expressões faciais fortes, emoções, tensão
+- Fundo escuro com:
+  * Textura grunge
+  * Pinceladas agressivas
+  * Arranhões/garras
+  * Partículas
+  * Contraste cinematográfico
+- Profundidade e energia
 
-INSTRUÇÕES:
-1. Copie 100% o ESTILO VISUAL da imagem 1 (referência).
-2. Use o LOGO da imagem 2 sem alterar. A tagline EXATA embaixo do logo é "CORTES DO MISSÃO" (nunca "CORTES DO PODCAST" ou outro texto).
-3. Coloque os {n_faces} participantes (imagens seguintes) como cutouts grandes lado a lado, ocupando a metade central da capa.
-4. PRESERVE IDENTIDADE dos rostos: as pessoas devem ser RECONHECÍVEIS.
-5. NÃO adicione labels com nomes embaixo das pessoas. NÃO escreva "PARTICIPANTE 1/2/3", "NOME", ou qualquer placeholder. Os cutouts ficam sem nenhum texto identificando-os.
-6. No rodapé, banner com o título: "{titulo.upper()}"
-7. Destaque a palavra "{highlight.upper()}" em cor contrastante (laranja sobre branco ou preto sobre laranja).
-8. Formato OBRIGATÓRIO: landscape 16:9, NUNCA quadrado ou vertical.
-9. NÃO inclua o logo do podcast original (Os Sócios, Market Makers, etc).
-10. Texto do título em FONTE BOLD/IMPACT com outline preto grosso.
+═══ TIPOGRAFIA ═══
+TÍTULO EXATO (não altere): "{titulo.upper()}"
+
+- Texto curto, forte, polêmico, emocional, sensacionalista sem exagerar
+- Destacar palavras-chave com amarelo/laranja, roxo ou branco
+- Fonte: brush agressiva, bold extrema, impactante, legível em mobile
+- Aplicar: sombra forte, stroke preto, glow leve, perspectiva leve
+
+═══ REGRAS ═══
+- Texto ocupa NO MÁXIMO 30% da thumbnail
+- Rosto principal = maior elemento visual
+- Sem poluição visual, premium e moderna
+- Funciona em telas pequenas
+- Impacto visual imediato
+- Sensação de urgência e debate quente
+
+═══ ESTILO FINAL ═══
+- Thumbnail de corte político PREMIUM
+- Visual agressivo, muito contraste, cinemático, viral
+- Estilo "canal grande de cortes"
+- YouTube CTR optimized
+
+═══ FORMATO ═══
+- 1280x720 (16:9 landscape, NUNCA quadrado ou vertical)
+- Ultra detalhado, alta nitidez, qualidade profissional
+
+═══ PROIBIDO (CRÍTICO) ═══
+- NÃO incluir logos de outros canais (Os Sócios, Market Makers, Missão Avança, MBL, M3L, MTL, etc)
+- NÃO inventar marcas, textos ou logos NÃO presentes no logo enviado
+- NÃO adicionar labels [NOME], [PARTICIPANTE 1], placeholders
+- NÃO redesenhar/estilizar o logo (use EXATO como na imagem 1)
+- NÃO usar tagline diferente de "CORTES DO MISSÃO" se incluir tagline
+- O LOGO DEVE APARECER 100% INTEIRO E VISÍVEL (não cortar nas bordas)
+- Reservar espaço no topo ou canto pro logo INTEIRO caber
+
+═══ TEXTO EM PORTUGUÊS (CRÍTICO) ═══
+- O título tem que ser ESCRITO EXATAMENTE como fornecido acima
+- NÃO traduza, NÃO altere palavras, NÃO mude ortografia
+- Cuidado com acentos: ã, õ, ç, é, á, ó devem ser PRESERVADOS
+- Atenção em palavras como: DESTRUIÇÃO (não DESTRUIÇÃN), AÇÃO, OPINIÃO
+- Se a palavra termina com "ÇÃO", a letra final é O (não N)
+- Verifique cada palavra do título caractere por caractere antes de renderizar
 """
 
 
@@ -144,77 +177,52 @@ def generate_cover(
     from google.genai import types
     from PIL import Image
 
-    # 1. Detecta participantes do INTRO do corte (primeiros 30s, max 20 prints)
-    from cover_html import (
-        detect_hosts_in_intro, detect_recurring_hosts,
-        detect_all_participants, extract_speaker_faces,
+    # 1. Extrai 1 FRAME do meio do corte (visual de contexto: rostos + cena)
+    import subprocess, tempfile
+    snapshot_ts = cut_start + (cut_end - cut_start) * 0.5  # meio do corte
+    tmpdir = Path(tempfile.mkdtemp(prefix="cover_frame_"))
+    frame_path = tmpdir / "frame.jpg"
+    subprocess.run(
+        ["ffmpeg", "-y", "-ss", f"{snapshot_ts}", "-i", str(video),
+         "-frames:v", "1", "-q:v", "2", str(frame_path)],
+        check=True, capture_output=True,
     )
-    cover_cfg = cfg.get("render", {}).get("cover", {})
-    if n_faces > 0:
-        face_png_list = extract_speaker_faces(video, cut_start, cut_end, n_faces=n_faces)
-    else:
-        max_h = cover_cfg.get("max_participantes", 4)
-        intro_sec = cover_cfg.get("intro_duracao_seg", 60.0)
-        max_prints = cover_cfg.get("intro_max_prints", 20)
-        intro_source = cover_cfg.get("intro_source", "video")
-        # Estratégia A (preferida): hosts do INTRO do source.mp4. Tenta janela inicial e
-        # amplia 2x se não achar (vinheta longa = hosts aparecem mais tarde).
-        face_png_list = []
-        for window in (intro_sec, intro_sec * 2, intro_sec * 4, intro_sec * 8):
-            face_png_list = detect_hosts_in_intro(
-                video, cut_start, cut_end,
-                intro_duration=window, max_prints=max_prints, max_hosts=max_h,
-                source=intro_source,
-            )
-            if face_png_list:
-                if window > intro_sec:
-                    print(f"[cover_gemini] hosts achados ampliando janela pra {int(window)}s")
-                break
-        # Estratégia B (fallback): hosts recorrentes no vídeo inteiro
-        if not face_png_list:
-            face_png_list = detect_recurring_hosts(video, max_hosts=max_h)
-        # Estratégia C: qualquer grid com N rostos
-        if not face_png_list:
-            face_png_list = detect_all_participants(video, max_faces=max_h, min_faces=2)
-        # Estratégia D: rostos do corte
-        if not face_png_list:
-            face_png_list = extract_speaker_faces(video, cut_start, cut_end, n_faces=3)
-    if not face_png_list:
-        raise RuntimeError("Nenhum rosto detectado — não posso compor capa Gemini")
-    print(f"[cover_gemini] {len(face_png_list)} host(s) selecionado(s) (melhor angle por host)")
+    frame_bytes = frame_path.read_bytes() if frame_path.exists() else None
+    try: frame_path.unlink()
+    except Exception: pass
+    try: tmpdir.rmdir()
+    except Exception: pass
+    if not frame_bytes:
+        raise RuntimeError("Não consegui extrair frame do corte")
+    print(f"[cover_gemini] frame extraído do timestamp {snapshot_ts:.1f}s ({len(frame_bytes)//1024} KB)")
 
-    # 2. Anexa referências visuais (logo + style)
+    # 2. Anexa logo OBRIGATÓRIO (única referência além do frame)
     template_dir = ROOT / "assets" / "cover_template"
     logo_file = template_dir / "logo.png"
-    style_ref_file = template_dir / "style_reference.png"
-    # Fallback pra logo antigo se 'logo.png' não existe
     if not logo_file.exists() and (template_dir / "logo_14garras.png").exists():
         logo_file = template_dir / "logo_14garras.png"
-    has_style_ref = style_ref_file.exists()
     has_logo = logo_file.exists()
+    if not has_logo:
+        raise RuntimeError(
+            f"Logo OBRIGATÓRIO ausente. Salve em {logo_file}"
+        )
 
-    # 3. Monta prompt + contents
-    prompt_text = _build_prompt(titulo, len(face_png_list), has_style_ref, has_logo)
+    # 3. Monta prompt + contents (logo primeiro, frame depois)
+    prompt_text = _build_prompt(titulo, has_logo=True, has_frame=True)
     client = _make_genai_client(cfg)
 
-    contents = [prompt_text]
-    if has_style_ref:
-        contents.append(types.Part.from_bytes(
-            data=style_ref_file.read_bytes(),
-            mime_type=f"image/{style_ref_file.suffix.lstrip('.').lower().replace('jpg','jpeg')}",
-        ))
-        print(f"[cover_gemini] anexada style reference: {style_ref_file.name}")
-    if has_logo:
-        contents.append(types.Part.from_bytes(
+    contents = [
+        prompt_text,
+        types.Part.from_bytes(
             data=logo_file.read_bytes(),
             mime_type=f"image/{logo_file.suffix.lstrip('.').lower().replace('jpg','jpeg')}",
-        ))
-        print(f"[cover_gemini] anexado logo: {logo_file.name}")
-    for png in face_png_list:
-        contents.append(types.Part.from_bytes(data=png, mime_type="image/png"))
+        ),
+        types.Part.from_bytes(data=frame_bytes, mime_type="image/jpeg"),
+    ]
+    print(f"[cover_gemini] enviando: prompt + logo ({logo_file.name}) + 1 frame")
 
-    print(f"[cover_gemini] enviando {len(face_png_list)} rostos + prompt ({len(prompt_text)} chars)...")
     model_id = cfg.get("render", {}).get("cover", {}).get("gemini_model", "gemini-2.5-flash-image")
+    print(f"[cover_gemini] modelo: {model_id} ({len(prompt_text)} chars prompt)")
 
     def _call_gemini(model: str):
         try:
