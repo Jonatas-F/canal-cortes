@@ -26,9 +26,9 @@ def main() -> None:
         print("[end_card] desativado em config.yaml")
         sys.exit(0)
 
-    img = ROOT / ec.get("path", "assets/end_card.png")
-    if not img.exists():
-        print(f"[end_card] não encontrado: {img}")
+    default_img = ROOT / ec.get("path", "assets/end_card.png")
+    if not default_img.exists():
+        print(f"[end_card] default não encontrado: {default_img}")
         sys.exit(1)
 
     duracao = ec.get("duracao_seg", 3)
@@ -36,7 +36,6 @@ def main() -> None:
     aplicar_em = ec.get("aplicar_em", ["short", "long"])
 
     files = sorted(cuts_dir.glob("*.mp4"))
-    # Pula thumbnails subfolder (não é mp4 mesmo, mas garante)
     files = [f for f in files if not f.name.endswith(".endcard.mp4") and not f.name.endswith(".main.mp4")]
 
     for f in files:
@@ -44,9 +43,13 @@ def main() -> None:
         if tipo not in aplicar_em:
             print(f"[end_card] skip {f.name} (tipo={tipo} não em aplicar_em)")
             continue
-        # Já tem end card? heurística simples: se duração > duração esperada + 2.5s, provavelmente já tem
-        # Pra simplificar, sempre reaplicar — usuário pode rodar manualmente quando quiser
-        print(f"[end_card] aplicando em {f.name}...")
+        # Path específico por tipo > default
+        path_key = f"path_{tipo}"
+        img_rel = ec.get(path_key) or ec.get("path", "assets/end_card.png")
+        img = ROOT / img_rel
+        if not img.exists():
+            img = default_img
+        print(f"[end_card] aplicando ({tipo}, {img.name}) em {f.name}...")
         tmp = f.with_suffix(".main.mp4")
         f.rename(tmp)
         try:

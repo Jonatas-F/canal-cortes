@@ -71,9 +71,12 @@ render:
     resolucao_seguir_fonte: true
   end_card:
     enabled: true
-    path: assets/end_card.png
+    # Path por tipo de corte (cai pra `path` se não tiver o específico)
+    path: assets/end_card.png        # default/fallback
+    path_short: assets/end_card.png  # shorts (vertical, CTA simples)
+    path_long: assets/end_card_full.png  # longs (versão completa)
     duracao_seg: 3
-    aplicar_em: [short, long]    # tipos que recebem o end card
+    aplicar_em: [short, long]
   cover:
     # Modo de geração quando NÃO houver inbox/<id>.cover.{png,jpg}:
     #   gemini: Gemini 2.5 Flash Image (Nano Banana) — qualidade alta, ~$0.04/img

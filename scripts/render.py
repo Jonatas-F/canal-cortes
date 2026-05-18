@@ -323,16 +323,27 @@ def append_end_card(main_path: Path, end_card_img: Path, out_path: Path, duratio
 
 
 def _maybe_append_end_card(out_path: Path, tipo: str, cfg: dict) -> None:
-    """Se end_card estiver habilitado pra esse tipo, regrava out_path com a imagem concatenada."""
+    """Se end_card estiver habilitado pra esse tipo, regrava out_path com a imagem concatenada.
+
+    Escolhe a imagem por tipo: path_short pra shorts, path_long pra longs.
+    Fallback pra `path` se a específica não for definida.
+    """
     ec = cfg.get("render", {}).get("end_card", {})
     if not ec.get("enabled"):
         return
     if tipo not in ec.get("aplicar_em", []):
         return
-    img = ROOT / ec.get("path", "assets/end_card.png")
+    # Path específico por tipo > path default
+    path_key = f"path_{tipo}"
+    img_rel = ec.get(path_key) or ec.get("path", "assets/end_card.png")
+    img = ROOT / img_rel
     if not img.exists():
-        print(f"[render] aviso: end_card não encontrado em {img}")
-        return
+        # Fallback pra path default se o específico não existe
+        img = ROOT / ec.get("path", "assets/end_card.png")
+        if not img.exists():
+            print(f"[render] aviso: end_card não encontrado em {img}")
+            return
+    print(f"[render]   end_card ({tipo}): {img.name}")
     tmp = out_path.with_suffix(".main.mp4")
     # Garante que nenhum handle Windows segurou o arquivo do render anterior
     import gc, time as _time
