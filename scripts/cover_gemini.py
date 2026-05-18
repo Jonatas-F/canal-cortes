@@ -207,7 +207,16 @@ def generate_cover(
             f"Logo OBRIGATÓRIO ausente. Salve em {logo_file}"
         )
 
-    # 3. Monta prompt + contents (logo primeiro, frame depois)
+    # 3. Valida ortografia PT-BR do título ANTES de enviar pro Gemini
+    from ortografia_ptbr import validar_titulo
+    cover_cfg = cfg.get("render", {}).get("cover", {})
+    deep_check = cover_cfg.get("validar_ortografia_profunda", True)
+    titulo_validado = validar_titulo(titulo, deep=deep_check)
+    if titulo_validado != titulo:
+        print(f"[cover_gemini] título ajustado por validação ortográfica")
+    titulo = titulo_validado
+
+    # 4. Monta prompt + contents (logo primeiro, frame depois)
     prompt_text = _build_prompt(titulo, has_logo=True, has_frame=True)
     client = _make_genai_client(cfg)
 

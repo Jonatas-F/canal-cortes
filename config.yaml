@@ -99,6 +99,8 @@ render:
     intro_source: video             # "video" (default, source.mp4) ou "cut" (intro do corte)
     remover_fundo: true             # rembg pra rostos quando mode=html
     max_rostos: 3
+    # Validação ortográfica PT-BR do título antes de gerar capa
+    validar_ortografia_profunda: true  # true = regex + Claude. false = só regex (instantâneo)
 
 # YouTube
 youtube:
