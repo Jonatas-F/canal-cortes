@@ -32,6 +32,8 @@ token.json.*
 token-*.json
 vertex-sa.json
 vertex-*.json
+cookies.txt
+cookies*.txt
 .env
 
 # whisper models (baixados sob demanda)

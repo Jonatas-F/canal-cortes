@@ -432,13 +432,18 @@ def main() -> None:
     elif args.publish:
         upload_to_youtube(cfg, mode="due")
 
-    # Sempre regenera Agenda.md (a menos que seja dry-run sem mudanças)
+    # Sempre regenera Agenda.md e Gastos.md
     if not args.dry_run or args.publish or args.upload_all_now or args.enqueue:
         try:
             import agenda
             agenda.main()
         except Exception as e:
             print(f"[schedule] aviso: agenda.py falhou ({e})")
+        try:
+            import gastos_report
+            gastos_report.main()
+        except Exception as e:
+            print(f"[schedule] aviso: gastos_report.py falhou ({e})")
 
 
 if __name__ == "__main__":

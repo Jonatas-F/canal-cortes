@@ -21,16 +21,41 @@ def download_url(url: str, out_dir: Path) -> Path:
     if existing.exists():
         return existing
     out_file = out_dir / "source.%(ext)s"
-    cmd = [
+
+    base_cmd = [
         "yt-dlp",
         "-f", "bv*[height<=1080]+ba/b[height<=1080]",
         "--merge-output-format", "mp4",
         "--write-info-json",
         "--write-thumbnail",
         "-o", str(out_file),
-        url,
     ]
-    subprocess.run(cmd, check=True)
+
+    # Estratégia 1: cookies.txt manual (mais confiável, evita bug DPAPI Chrome/Edge)
+    cookies_file = ROOT / "cookies.txt"
+    if cookies_file.exists():
+        print(f"[ingest] usando cookies.txt")
+        try:
+            subprocess.run(base_cmd + ["--cookies", str(cookies_file), url], check=True)
+            return next(out_dir.glob("source.mp4"))
+        except subprocess.CalledProcessError as e:
+            print(f"[ingest] cookies.txt falhou ({e}), tentando browser...")
+
+    # Estratégia 2: cookies do browser (pode falhar com Chrome/Edge moderno)
+    import os
+    browsers_to_try = os.environ.get("YT_DLP_BROWSER", "firefox,edge,chrome,brave").split(",")
+    for browser in browsers_to_try:
+        cmd = base_cmd + ["--cookies-from-browser", browser.strip(), url]
+        try:
+            subprocess.run(cmd, check=True)
+            print(f"[ingest] cookies de '{browser}' funcionaram")
+            return next(out_dir.glob("source.mp4"))
+        except subprocess.CalledProcessError:
+            continue
+
+    # Estratégia 3: sem cookies (pode falhar com anti-bot)
+    print(f"[ingest] tentando SEM cookies (último recurso)...")
+    subprocess.run(base_cmd + [url], check=True)
     return next(out_dir.glob("source.mp4"))
 
 

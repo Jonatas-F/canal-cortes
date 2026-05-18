@@ -16,7 +16,7 @@ import os
 import sys
 from pathlib import Path
 
-from common import ROOT, load_config
+from common import ROOT, load_config, cost_log_record
 
 
 def _get_api_key(cfg: dict) -> str:
@@ -313,6 +313,29 @@ def generate_cover(
     else:
         img = img.resize((1280, 720), Image.LANCZOS)
     img.convert("RGB").save(out_path, "JPEG", quality=92)
+
+    # Registra custo da geração de capa (preço aproximado por modelo)
+    _PRICING_USD = {
+        "gemini-2.5-flash-image": 0.039,
+        "gemini-3-pro-image-preview": 0.10,
+        "gemini-3.1-flash-image-preview": 0.05,
+    }
+    cost_estimate = _PRICING_USD.get(model_id, 0.04)
+    usd_brl = float(cfg.get("moeda", {}).get("usd_brl_rate", 5.30))
+    # Extrai source_id e cut_id do nome do arquivo de saída (ex: cuts/<sid>/thumbnails/long_01_cover.jpg)
+    parts = out_path.parts
+    sid = parts[-3] if len(parts) >= 3 else None
+    cut_name = out_path.stem.replace("_cover_gemini", "").replace("_cover", "")
+    cid = f"{sid}__{cut_name}" if sid else None
+    cost_log_record(
+        service="gemini_cover",
+        cost_usd=cost_estimate,
+        source_id=sid,
+        cut_id=cid,
+        units_info=f"model={model_id}, 1 image",
+        description=f"capa long {out_path.name}",
+        usd_brl_rate=usd_brl,
+    )
 
 
 def main() -> None:

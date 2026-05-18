@@ -67,9 +67,49 @@ def get_queue_db() -> sqlite3.Connection:
             uploads_count INTEGER NOT NULL DEFAULT 0,
             updated_at TEXT DEFAULT CURRENT_TIMESTAMP
         );
+
+        CREATE TABLE IF NOT EXISTS cost_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date TEXT NOT NULL,              -- YYYY-MM-DD local (BRT)
+            service TEXT NOT NULL,           -- 'claude_analyze', 'gemini_cover', 'youtube_upload', etc
+            source_id TEXT,
+            cut_id TEXT,
+            cost_usd REAL NOT NULL DEFAULT 0,
+            cost_brl REAL NOT NULL DEFAULT 0,
+            units_info TEXT,                 -- tokens, imagens, etc (descrição livre)
+            description TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_cost_date ON cost_log(date);
+        CREATE INDEX IF NOT EXISTS idx_cost_service ON cost_log(service);
     """)
     conn.commit()
     return conn
+
+
+# === Cost tracking ===
+
+def cost_log_record(
+    service: str,
+    cost_usd: float,
+    source_id: str | None = None,
+    cut_id: str | None = None,
+    units_info: str = "",
+    description: str = "",
+    usd_brl_rate: float = 5.30,
+) -> None:
+    """Registra um gasto no SQLite. Idempotente — múltiplas chamadas geram múltiplos registros."""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    today = datetime.now(ZoneInfo("America/Sao_Paulo")).date().isoformat()
+    conn = get_queue_db()
+    conn.execute(
+        """INSERT INTO cost_log (date, service, source_id, cut_id, cost_usd, cost_brl, units_info, description)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        (today, service, source_id, cut_id, cost_usd, cost_usd * usd_brl_rate, units_info, description),
+    )
+    conn.commit()
+    conn.close()
 
 
 # === YouTube quota tracking ===

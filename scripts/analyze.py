@@ -11,7 +11,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from common import ROOT, load_config
+from common import ROOT, load_config, cost_log_record
 
 
 def resolve_cli(name: str) -> str:
@@ -138,6 +138,24 @@ def main() -> None:
         json.dumps(plan, ensure_ascii=False, indent=2), encoding="utf-8"
     )
     print(f"[analyze] {len(plan['cortes'])} corte(s) >= {score_min} -> {out_dir / 'plan.json'}")
+
+    # Registra custo da análise Claude
+    total_cost = envelope.get("total_cost_usd", 0) or 0
+    usage = envelope.get("usage", {}) or {}
+    units_info = (
+        f"in={usage.get('input_tokens', 0)} "
+        f"out={usage.get('output_tokens', 0)} "
+        f"cache_read={usage.get('cache_read_input_tokens', 0)}"
+    )
+    usd_brl = float(cfg.get("moeda", {}).get("usd_brl_rate", 5.30))
+    cost_log_record(
+        service="claude_analyze",
+        cost_usd=total_cost,
+        source_id=source_id,
+        units_info=units_info,
+        description=f"{len(plan['cortes'])} cortes gerados",
+        usd_brl_rate=usd_brl,
+    )
     # Hard-delete arquivos órfãos de runs anteriores que não estão no plan novo
     keep_files = set()
     for c in plan["cortes"]:
