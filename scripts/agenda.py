@@ -12,7 +12,7 @@ from collections import defaultdict
 from datetime import date, datetime
 from pathlib import Path
 
-from common import get_queue_db
+from common import ROOT, get_queue_db
 
 VAULT_PATH = Path(os.environ.get(
     "OBSIDIAN_VAULT_PATH",
@@ -33,11 +33,22 @@ STATUS_BADGE = {
 
 
 def project_link(source_id: str) -> str:
-    """Wikilink para a página de projeto (Cortes/<folder>/_Project)."""
+    """Wikilink para a página de projeto. Usa o nome do canal (não _Project)."""
     base = VAULT_PATH / "Canal de Cortes" / "Cortes"
     if base.exists():
         for sub in base.iterdir():
             if sub.is_dir() and sub.name.startswith(source_id):
+                # Procura o project page (não é cut normal nem _Project legacy)
+                cuts_names = {"long_01", "long_02", "long_03", "short_01", "short_02",
+                              "short_03", "short_04", "short_05", "_Project", "_Index"}
+                project_files = [
+                    p for p in sub.glob("*.md")
+                    if p.stem not in cuts_names and not p.stem.startswith(("long_", "short_"))
+                ]
+                if project_files:
+                    name = project_files[0].stem
+                    return f"[[Cortes/{sub.name}/{name}|{name}]]"
+                # Fallback legacy
                 return f"[[Cortes/{sub.name}/_Project|{sub.name}]]"
     return f"`{source_id}`"
 
@@ -55,16 +66,54 @@ def cut_note_link(source_id: str, cut_id: str) -> str:
     return f"`{cut_id}`"
 
 
+def _safe_filename(text: str) -> str:
+    """Sanitiza string pra usar como nome de arquivo (cross-platform)."""
+    bad = '<>:"/\\|?*'
+    return "".join("_" if c in bad else c for c in text).strip()
+
+
+def _read_source_meta(source_id: str) -> dict:
+    """Lê raw/<source_id>/meta.json — tem canal_fonte, tema, etc."""
+    meta_path = ROOT / "raw" / source_id / "meta.json"
+    if meta_path.exists():
+        import json
+        try:
+            return json.loads(meta_path.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+    return {}
+
+
 def build_project_index(folder: Path, source_id: str, counts_for: dict) -> Path:
-    """Gera Cortes/<folder>/_Project.md — página do projeto com lista de cortes."""
-    cuts = sorted(p for p in folder.glob("*.md") if p.stem != "_Project")
-    project_path = folder / "_Project.md"
-    display = folder.name
+    """Gera Cortes/<folder>/<NomeDoCanal>.md — page do projeto.
+
+    O arquivo é nomeado com o canal_fonte do source (não '_Project') pra
+    aparecer com nome legível no graph view do Obsidian.
+    """
+    source_meta = _read_source_meta(source_id)
+    canal_fonte = source_meta.get("canal_fonte", "").strip()
+    display = canal_fonte if canal_fonte else folder.name
+
+    # Filename = canal_fonte sanitizado + .md
+    project_filename = _safe_filename(display) + ".md"
+    project_path = folder / project_filename
+
+    # Apaga _Project.md legado se existir e for diferente
+    legacy = folder / "_Project.md"
+    if legacy.exists() and legacy.name != project_filename:
+        legacy.unlink()
+
+    # Cortes = todos os .md exceto o próprio project page
+    cuts = sorted(p for p in folder.glob("*.md") if p.name != project_filename)
 
     lines: list[str] = []
     lines.append("---")
     lines.append(f"titulo: \"{display}\"")
     lines.append(f"source_id: {source_id}")
+    lines.append(f"canal_fonte: \"{canal_fonte}\"")
+    lines.append("aliases:")
+    lines.append(f"  - \"{display}\"")
+    lines.append(f"  - \"{source_id}\"")
     lines.append(f"atualizado: {datetime.now().isoformat(timespec='seconds')}")
     lines.append("---\n")
     lines.append(f"# 📺 {display}\n")
@@ -74,6 +123,11 @@ def build_project_index(folder: Path, source_id: str, counts_for: dict) -> Path:
     scheduled = counts_for.get("scheduled", 0)
     total = sum(counts_for.values()) or len(cuts)
     lines.append(f"**{total} corte(s)** — ✅ {published} publicado(s) · ⏰ {scheduled} agendado(s)\n")
+    if source_meta.get("source_url"):
+        lines.append(f"**Vídeo-fonte:** [{source_meta.get('titulo_original', source_meta.get('source_url'))}]({source_meta['source_url']})\n")
+    if source_meta.get("tema"):
+        lines.append(f"**Tema:** {source_meta['tema']}\n")
+
     lines.append("## Cortes\n")
     if not cuts:
         lines.append("_Sem cortes ainda._\n")
@@ -127,11 +181,13 @@ def build_cortes_index() -> None:
         for folder in subfolders:
             source_id = folder.name.split(" - ")[0]
             counts_for = counts.get(source_id, {})
-            build_project_index(folder, source_id, counts_for)
+            project_path = build_project_index(folder, source_id, counts_for)
+            project_name = project_path.stem  # nome legível do canal
             published = counts_for.get("published", 0)
             scheduled = counts_for.get("scheduled", 0)
             total = sum(counts_for.values()) or len(list(folder.glob("*.md")))
-            link = f"[[{folder.name}/_Project|{folder.name}]]"
+            # Link aponta pro nome do canal (não _Project), aparece bonito no graph
+            link = f"[[{folder.name}/{project_name}|{project_name}]]"
             lines.append(f"| {link} | {total} | ✅ {published} | ⏰ {scheduled} |")
         lines.append("")
 
